@@ -1,0 +1,15 @@
+[MASTER]
+disable = C0114, # missing-module-docstring
+          C0115, # missing-class-docstring
+          C0116, # missing-function-docstring
+          W0401, # wildcard-import
+          W1514, # unspecified-encoding
+          W0614, # unused-wildcard-import
+          E1136, # disable=unsubscriptable-object
+          W0511, # fixme, TODO
+          C0302, # too-many-lines
+
+
+
+[FORMAT]
+max-line-length = 120
