@@ -58,8 +58,14 @@ HTML_TEMPLATE = """
         }
         .report th, .report td {
             padding: 5px;
+            width: auto;
+        }
+        .report th:first-child, .report td:first-child {
+            text-align: left;
+            width: 80px;
+        }
+        .report th:not(:first-child), .report td:not(:first-child) {
             text-align: right;
-            width: 100px;
         }
         .err th, .err td {
             padding-left: 50px;
@@ -177,7 +183,7 @@ class GTestManager(SimpleLogger):
         self.options = options
         self.results = pd.DataFrame(columns=['Test', 'Status', 'Time', 'Log'])
         self.gtest = self._find_binary()
-        self.options.output = self.options.output / f'{self.options.gtest}_{datetime.now().strftime("%Y%m%d%H%M%S")}'
+        self.options.output = self.options.output / f'{self.options.gtest}'  # _{datetime.now().strftime("%Y%m%d%H%M%S")}'
         self.options.output.mkdir(parents=True, exist_ok=True)
 
         # Private attributes
