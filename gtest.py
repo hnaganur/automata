@@ -57,8 +57,10 @@ HTML_TEMPLATE = """
             border-bottom: 1px solid #353535;
         }
         .report th, .report td {
-            padding: 5px;
+            padding-left: 20px;
+            padding-right: 20px;
             width: auto;
+            height: 30px;
         }
         .report th:first-child, .report td:first-child {
             text-align: left;
@@ -67,11 +69,19 @@ HTML_TEMPLATE = """
         .report th:not(:first-child), .report td:not(:first-child) {
             text-align: right;
         }
+        .report th, .report tr:last-child td, .err th {
+            background-color: #353535;
+            color: #fff;
+            font-weight: bold;
+        }
         .err th, .err td {
-            padding-left: 50px;
-            padding-right: 10px;
+            padding-left: 20px;
+            padding-right: 20px;
             text-align: left;
             height: 30px;
+        }
+        .err th:last-child, .err td:last-child {
+            text-align: right;
         }
         .err tr:last-child td {
             border: none;
@@ -91,6 +101,20 @@ HTML_TEMPLATE = """
         li {
             padding: 5px;
         }
+        a:link {
+            color: #274ebb;
+            background-color: transparent;
+            /* text-decoration: none; */
+        }
+        a:hover {
+          color: yellow;
+          background-color: transparent;
+          text-decoration: underline;
+        }
+        a:visited {
+            color:pink;
+            background-color: transparent;
+        }
     </style>
     </head>
     <body>
@@ -107,6 +131,7 @@ HTML_TEMPLATE = """
                 {{summary_table}}
             </div>
             <div style="margin-top: 50px">
+                <h3>Failed Tests:</h3>
                 {{error_table}}
             </div>
         </div>
@@ -327,21 +352,33 @@ class GTestManager(SimpleLogger):
 
     def summerize(self) -> None:
         results = self.results.copy()
-        results['Suite'] = results['Test'].apply(lambda x: x.split('.')[0].strip())
+        results['Suite'] = results['Test'].apply(lambda x: (x.split('.')[0]).split('/')[0].strip())
 
         summary = results.groupby('Suite').agg(
-            Total=pd.NamedAgg(column='Test', aggfunc='count'),
+            Tests=pd.NamedAgg(column='Test', aggfunc='count'),
             Passed=pd.NamedAgg(column='Status', aggfunc=lambda x: (x == 'Passed').sum()),
             Failed=pd.NamedAgg(column='Status', aggfunc=lambda x: (x == 'Failed').sum()),
             Killed=pd.NamedAgg(column='Status', aggfunc=lambda x: (x == 'Killed').sum()),
-            Time=pd.NamedAgg(column='Time', aggfunc='sum')
         )
 
-        summary['Time'] = summary['Time'] / 1000
-        summary['Pass Rate'] = (summary['Passed'] / summary['Total'] * 100).round(2).fillna(0).astype(str) + '%'
+        # Add a total row
+        total_row = pd.DataFrame({
+            'Tests': [summary['Tests'].sum()],
+            'Passed': [summary['Passed'].sum()],
+            'Failed': [summary['Failed'].sum()],
+            'Killed': [summary['Killed'].sum()]
+        }, index=['Total'])
+        summary = pd.concat([summary, total_row])
+        summary.index.name = 'Suite'
+
+        # Calculate pass rate
+        summary['Pass Rate'] = (summary['Passed'] / summary['Tests'] * 100).round(2).fillna(0).astype(str) + '%'
 
         self.info('\n\nTest Summary:\n', FontColor.CYAN)
         self.info(summary.to_markdown())
+
+        if summary['Pass Rate']['Total'] != '100.0%':
+            self.error(f'\n\nTotal Pass Rate: {summary["Pass Rate"]["Total"]} - Some tests failed or were killed!')
 
         self.info('\n\nGenerating HTML Report...', FontColor.CYAN)
         self.generate_html_report(summary.reset_index(), results)
@@ -350,19 +387,22 @@ class GTestManager(SimpleLogger):
         results = results.reset_index()
         status = results['Status'].unique().tolist()
 
+        summary['Failed'] = summary['Failed'].apply(lambda x: f'<span style="color:red">{x}</span>' if x > 0 else x)
+        summary['Killed'] = summary['Killed'].apply(lambda x: f'<span style="color:red">{x}</span>' if x > 0 else x)
         summary_table = summary.to_html(classes='report', index=False, escape=False, border=0)
 
         error_table = ''
         if 'Failed' in status or 'Killed' in status:
             error_table = results[results['Status'] != 'Passed'][['Suite', 'Test', 'Status', 'Time', 'Log']]
+            error_table['Group'] = error_table['Test'].apply(lambda x: x.split('.')[0].split('/')[1] if '/' in x else x.split('.')[0])
             error_table = [
                 f"""\
                 <tr>
                     <td>{row['Suite']}</td>
-                    <td>{row['Test']}</td>
+                    <td>{row['Group']}</td>
+                    <td><a href="{row['Log']}">{row['Test'].split('.')[1]}</a></td>
                     <td>{row['Status']}</td>
                     <td>{row['Time']}</td>
-                    <td><a href="{row['Log']}" class="fa fa-file-text"></a></td>
                 </tr>"""
                 for _, row in error_table.iterrows()
             ]
@@ -372,10 +412,10 @@ class GTestManager(SimpleLogger):
                     <thead>
                         <tr>
                             <th>Suite</th>
+                            <th>Group</th>
                             <th>Test</th>
                             <th>Status</th>
                             <th>Run Time(ms)</th>
-                            <th>Log</th>
                         </tr>
                     </thead>
                     <tbody>
